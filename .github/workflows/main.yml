@@ -53,28 +53,40 @@ jobs:
           sleep 15
           docker compose logs
 
-  monitor:
-  name: Monitor
-  needs: deploy
-  runs-on: ubuntu-latest
-  steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v3
+  # monitor:
+  # name: Monitor
+  # needs: deploy
+  # runs-on: ubuntu-latest
+  # steps:
+  #   - name: Checkout Repository
+  #     uses: actions/checkout@v3
     
-    - name: Change to Project Directory
-      run: cd ./docker-compose-file
+  #   - name: Change to Project Directory
+  #     run: cd ./docker-compose-file
 
-    - name: Check Services Health
-      run: |
-        # Check container status
-        docker compose -f ./docker-compose.yml ps
+  #   - name: Check Services Health
+  #     run: |
+  #       # Check container status
+  #       docker compose -f ./docker-compose.yml ps
 
-        # Check resource usage
-        docker stats --no-stream
+  #       # Check resource usage
+  #       docker stats --no-stream
 
-        # Check logs for any errors
-        docker compose -f ./docker-compose.yml logs --tail=50
-
+  #       # Check logs for any errors
+  #       docker compose -f ./docker-compose.yml logs --tail=50
+ monitor:
+    name: Monitor
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Services Health
+        run: |
+          # Check container status
+          docker compose ps
+          # Check resource usage
+          docker stats --no-stream
+          # Check logs for any errors
+          docker compose logs --tail=50
 
 # # .github/workflows/main.yaml
 # name: CI/CD Pipeline
