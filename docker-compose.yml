@@ -1,4 +1,3 @@
-# Remove version as it's now optional and causing warnings
 services:
   frontend:
     build:
@@ -38,6 +37,11 @@ services:
     networks:
       - user-system-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   mongodb:
     image: mongo:latest

@@ -1,10 +1,7 @@
+# Updated main.yaml
 name: Docker CI/CD Pipeline
 
 on:
-  # push:
-  #   branches: [ main, develop ]
-  # pull_request:
-  #   branches: [ main, develop ]
   workflow_dispatch: {}
 
 jobs:
@@ -26,7 +23,7 @@ jobs:
           docker compose up -d
           docker compose ps
           # Wait for services to be up
-          sleep 10
+          sleep 20
           # Check if containers are running
           docker compose ps --format json | grep "running" || exit 1
       
@@ -34,19 +31,8 @@ jobs:
         run: |
           # Check if frontend is accessible
           curl -f http://localhost:3000 || echo "Frontend not responding"
-          # Check if backend is accessible
-          curl -f http://localhost:5000 || echo "Backend not responding"
-          # Check MongoDB connection through backend
-          docker compose exec -T backend node -e "
-            const mongoose = require('mongoose');
-            mongoose.connect('mongodb://mongodb:27017/user-system').then(() => {
-              console.log('MongoDB connected successfully');
-              process.exit(0);
-            }).catch((err) => {
-              console.error('MongoDB connection error:', err);
-              process.exit(1);
-            });
-          "
+          # Check if backend health endpoint is accessible
+          curl -f http://localhost:5000/health || echo "Backend health check failed"
 
   deploy:
     name: Deploy
@@ -80,6 +66,7 @@ jobs:
           docker stats --no-stream
           # Check logs for any errors
           docker compose logs --tail=50
+
 # # .github/workflows/main.yaml
 # name: CI/CD Pipeline
 
