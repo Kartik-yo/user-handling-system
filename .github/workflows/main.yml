@@ -73,19 +73,19 @@ jobs:
 
   #       # Check logs for any errors
   #       docker compose -f ./docker-compose.yml logs --tail=50
-  monitor:
-    name: Monitor
-    needs: deploy
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check Services Health
-        run: |
-          # Check container status
-          docker compose ps
-          # Check resource usage
-          docker stats --no-stream
-          # Check logs for any errors
-          docker compose logs --tail=50
+  # monitor:
+  #   name: Monitor
+  #   needs: deploy
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Check Services Health
+  #       run: |
+  #         # Check container status
+  #         docker compose ps
+  #         # Check resource usage
+  #         docker stats --no-stream
+  #         # Check logs for any errors
+  #         docker compose logs --tail=50
 
 # # .github/workflows/main.yaml
 # name: CI/CD Pipeline
