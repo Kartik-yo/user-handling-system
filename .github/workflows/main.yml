@@ -1,3 +1,114 @@
+name: Docker CI/CD Pipeline
+
+on:
+  # push:
+  #   branches: [ main, develop ]
+  # pull_request:
+  #   branches: [ main, develop ]
+  workflow_dispatch: {}
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      - name: Run Tests in Docker
+        run: |
+          # Build test image and run tests
+          docker compose -f docker-compose.yml build
+          docker compose -f docker-compose.yml run frontend npm test
+          docker compose -f docker-compose.yml run backend npm test
+
+  build:
+    name: Build
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      - name: Build Docker images
+        run: |
+          docker compose build --no-cache
+      
+      - name: Save Docker images
+        run: |
+          docker save user-handling-system-frontend:latest > frontend_image.tar
+          docker save user-handling-system-backend:latest > backend_image.tar
+      
+      - name: Upload Docker images as artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: docker-images
+          path: |
+            frontend_image.tar
+            backend_image.tar
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Download Docker images
+        uses: actions/download-artifact@v3
+        with:
+          name: docker-images
+          path: ./docker-images
+      
+      - name: Load Docker images
+        run: |
+          docker load < ./docker-images/frontend_image.tar
+          docker load < ./docker-images/backend_image.tar
+      
+      - name: Deploy with Docker Compose
+        run: |
+          docker compose down --remove-orphans
+          docker compose up -d
+          
+      - name: Verify Deployment
+        run: |
+          # Wait for containers to be up
+          sleep 10
+          docker compose ps
+          docker compose logs
+
+  monitor:
+    name: Monitor
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Container Health
+        run: |
+          # Check if containers are running
+          docker compose ps
+          
+          # Check container logs
+          docker compose logs --tail=100
+          
+          # Check container resources
+          docker stats --no-stream
+      
+      - name: Application Health Check
+        run: |
+          # Frontend health check
+          curl -f http://localhost:3000/health || exit 1
+          # Backend health check
+          curl -f http://localhost:5000/health || exit 1
+
+      - name: Monitor Container Metrics
+        run: |
+          docker compose ps -q | xargs docker stats --no-stream
+
 # # .github/workflows/main.yaml
 # name: CI/CD Pipeline
 
