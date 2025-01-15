@@ -365,92 +365,92 @@ jobs:
 #         env:
 #           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
-name: Node.js CI/CD Pipeline
+# name: Node.js CI/CD Pipeline
 
-on:
-  # push:
-  #   branches: [ main, develop ]
-  # pull_request:
-  #   branches: [ main, develop ]
-  workflow_dispatch: {}
+# on:
+#   # push:
+#   #   branches: [ main, develop ]
+#   # pull_request:
+#   #   branches: [ main, develop ]
+#   workflow_dispatch: {}
 
-jobs:
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18.x'
-          cache: 'npm'
-      - name: Install Dependencies
-        run: npm ci
-      - name: Run Tests
-        run: |
-          npm run test
-          npm run lint
+# jobs:
+#   test:
+#     name: Test
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v3
+#       - name: Setup Node.js
+#         uses: actions/setup-node@v3
+#         with:
+#           node-version: '18.x'
+#           cache: 'npm'
+#       - name: Install Dependencies
+#         run: npm ci
+#       - name: Run Tests
+#         run: |
+#           npm run test
+#           npm run lint
 
-  build:
-    name: Build
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18.x'
-          cache: 'npm'
-      - name: Install Dependencies
-        run: npm ci
-      - name: Build Application
-        run: npm run build
-      - name: Upload Build Artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: build
-          path: build/
+#   build:
+#     name: Build
+#     needs: test
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v3
+#       - name: Setup Node.js
+#         uses: actions/setup-node@v3
+#         with:
+#           node-version: '18.x'
+#           cache: 'npm'
+#       - name: Install Dependencies
+#         run: npm ci
+#       - name: Build Application
+#         run: npm run build
+#       - name: Upload Build Artifacts
+#         uses: actions/upload-artifact@v3
+#         with:
+#           name: build
+#           path: build/
 
-  deploy:
-    name: Deploy
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    steps:
-      - name: Download Build Artifacts
-        uses: actions/download-artifact@v3
-        with:
-          name: build
-          path: build
-      - name: Deploy Locally
-        run: |
-          echo "Starting local deployment..."
-          npm run start
-          # Add your local deployment commands here
-          # For example:
-          # pm2 restart your-app
-          # or
-          # docker-compose up -d
+#   deploy:
+#     name: Deploy
+#     needs: build
+#     runs-on: ubuntu-latest
+#     if: github.ref == 'refs/heads/main'
+#     steps:
+#       - name: Download Build Artifacts
+#         uses: actions/download-artifact@v3
+#         with:
+#           name: build
+#           path: build
+#       - name: Deploy Locally
+#         run: |
+#           echo "Starting local deployment..."
+#           npm run start
+#           # Add your local deployment commands here
+#           # For example:
+#           # pm2 restart your-app
+#           # or
+#           # docker-compose up -d
 
-  monitor:
-    name: Monitor
-    needs: deploy
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check Application Health
-        run: |
-          curl -f http://localhost:3000/health || exit 1
-      - name: Monitor Application Logs
-        run: |
-          # Add your local monitoring commands here
-          # For example:
-          # pm2 logs --lines 100
-          # or
-          # docker logs your-container --tail 100
-      - name: Send Notification
-        if: always()
-        run: |
-          echo "Deployment status: ${{ job.status }}"
-          # Add your notification command here if needed
+#   monitor:
+#     name: Monitor
+#     needs: deploy
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Check Application Health
+#         run: |
+#           curl -f http://localhost:3000/health || exit 1
+#       - name: Monitor Application Logs
+#         run: |
+#           # Add your local monitoring commands here
+#           # For example:
+#           # pm2 logs --lines 100
+#           # or
+#           # docker logs your-container --tail 100
+#       - name: Send Notification
+#         if: always()
+#         run: |
+#           echo "Deployment status: ${{ job.status }}"
+#           # Add your notification command here if needed
