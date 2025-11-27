@@ -3,7 +3,7 @@ pipeline {
     agent any
 
     tools {
-        nodejs 'NodeJS-22'   // ← Make sure NodeJS Plugin is installed and this name exists
+        NodeJS 'NodeJS-22'   // ← Make sure NodeJS Plugin is installed and this name exists
     }
 
     environment {
