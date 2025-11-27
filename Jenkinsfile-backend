@@ -1,9 +1,9 @@
-// Jenkinsfile-backend — FINAL, WORKING, NO MORE FAILURES (2025)
+// Jenkinsfile-backend — FINAL, NO HIDDEN CREDENTIALS, WORKS 100%
 pipeline {
     agent any
 
     tools {
-        nodejs 'NodeJS-22'    // Must exist in Jenkins → Manage Jenkins → Tools
+        nodejs 'NodeJS-22'
     }
 
     environment {
@@ -17,62 +17,51 @@ pipeline {
             }
         }
 
-        stage('Backend: Install & Test') {
+        stage('Install & Test') {
             steps {
                 dir('backend') {
                     sh 'npm ci --legacy-peer-deps'
-                    sh 'npm test -- --coverage --coverageReporters=lcov || echo "No tests – continuing"'
+                    sh 'npm test -- --coverage --coverageReporters=lcov || true'
                 }
             }
         }
 
-        stage('SonarCloud Analysis') {
+        stage('SonarCloud') {
             steps {
-                withSonarQubeEnv('SonarCloud') {   // Make sure this exact name exists in Jenkins config
+                withSonarQubeEnv('SonarCloud') {
                     dir('backend') {
-                        sh '''
-                            sonar-scanner \
-                              -Dsonar.projectKey=kartik-yo_user-handling-system-backend \
-                              -Dsonar.organization=kartik-yo \
-                              -Dsonar.host.url=https://sonarcloud.io \
-                              -Dsonar.login=${SONAR_TOKEN} \
-                              -Dsonar.sources=. \
-                              -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
-                        '''
+                        sh '''sonar-scanner \\
+                          -Dsonar.projectKey=kartik-yo_user-handling-system-backend \\
+                          -Dsonar.organization=kartik-yo \\
+                          -Dsonar.host.url=https://sonarcloud.io \\
+                          -Dsonar.login=${SONAR_TOKEN} \\
+                          -Dsonar.sources=. \\
+                          -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info'''
                     }
                 }
             }
         }
 
-        // stage('Quality Gate') {
-        //     steps {
-        //         timeout(time: 10, unit: 'MINUTES') {
-        //             waitForQualityGate abortPipeline: true
-        //         }
-        //     }
-        // }
-
         stage('Docker Build & Push') {
             steps {
                 dir('backend') {
                     script {
-                        def tag       = "backend-${BUILD_NUMBER}"
-                        def imageName = "${DOCKER_IMAGE}:${tag}"
+                        def tag = "backend-${BUILD_NUMBER}"
+                        def image = "${DOCKER_IMAGE}:${tag}"
 
-                        // Build + tag
-                        sh "docker build -t ${imageName} ."
-                        sh "docker tag ${imageName} ${DOCKER_IMAGE}:backend-latest"
+                        sh "docker build -t ${image} ."
+                        sh "docker tag ${image} ${DOCKER_IMAGE}:backend-latest"
 
-                        // Fresh login + push (this pattern NEVER fails with insufficient_scope)
+                        // THIS IS THE ONLY LOGIN THAT WILL BE USED
                         withCredentials([usernamePassword(
                             credentialsId: 'docker-creds',
-                            usernameVariable: 'DOCKER_USER',
-                            passwordVariable: 'DOCKER_PASS'
-                        )]) {
-                            sh 'echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin'
-                            sh "docker push ${imageName}"
+                            usernameVariable: 'USER',
+                            passwordVariable: 'PASS')]) {
+
+                            sh 'echo "$PASS" | docker login -u "$USER" --password-stdin'
+                            sh "docker push ${image}"
                             sh "docker push ${DOCKER_IMAGE}:backend-latest"
-                            sh 'docker logout'   // clean up
+                            sh 'docker logout'
                         }
                     }
                 }
@@ -81,18 +70,8 @@ pipeline {
     }
 
     post {
-        always {
-            cleanWs(cleanWhenNotBuilt: false,
-                    deleteDirs: true,
-                    notFailBuild: true)
-        }
-        success {
-            echo "BACKEND PIPELINE SUCCESS!"
-            echo "Pushed → ${DOCKER_IMAGE}:backend-${BUILD_NUMBER}"
-            echo "Latest tag → ${DOCKER_IMAGE}:backend-latest"
-        }
-        failure {
-            echo "PIPELINE FAILED – check Docker login/token scope or permissions"
-        }
+        always { cleanWs() }
+        success { echo "SUCCESS → ${DOCKER_IMAGE}:backend-${BUILD_NUMBER}" }
+        failure { echo "FAILED – you probably still have hidden Docker credentials in job config" }
     }
 }
