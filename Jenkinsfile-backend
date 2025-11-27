@@ -55,16 +55,17 @@ pipeline {
         // }
 
         stage('Docker Build & Push') {
-            steps {
-                dir('backend') {
-                    script {
-                        def tag = "backend-${BUILD_NUMBER}"
-                        def image = docker.build("${DOCKER_IMAGE}:${tag}")
+        steps {
+            dir('backend') {
+                script {
+                    def tag = "backend-${BUILD_NUMBER}"
+                    def image = "${DOCKER_IMAGE}:${tag}"
 
-                        docker.withRegistry('', 'docker-creds') {
-                            image.push()
-                            image.push('backend-latest')
-                        }
+                    // This uses the 'docker-creds' you already have in Jenkins
+                    docker.withRegistry('', 'docker-creds') {
+                        def img = docker.build(image, '.')
+                        img.push()
+                        img.push('backend-latest')
                     }
                 }
             }
