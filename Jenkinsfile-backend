@@ -1,9 +1,9 @@
-// Jenkinsfile-backend 
+// Jenkinsfile-backend — FIXED FOR SONAR PLUGINS
 pipeline {
     agent any
 
     tools {
-        nodejs 'NodeJS-22'  // Now works after plugin + config
+        nodejs 'NodeJS-22'  // Now works
     }
 
     environment {
@@ -20,7 +20,7 @@ pipeline {
         stage('Backend: Install & Test') {
             steps {
                 dir('backend') {
-                    nodejs(nodeJSInstallationName: 'NodeJS-22') {  // Wrap for auto PATH
+                    nodejs(nodeJSInstallationName: 'NodeJS-22') {
                         sh 'npm ci --legacy-peer-deps'
                         sh 'npm test -- --coverage --coverageReporters=lcov || echo "No backend tests found"'
                     }
@@ -30,14 +30,16 @@ pipeline {
 
         stage('SonarQube Analysis - Backend') {
             steps {
-                withSonarQubeEnv('MySonarQubeServer') {  // Configure in Jenkins Global Config
-                    nodejs(nodeJSInstallationName: 'NodeJS-22') {
-                        sh '''
-                            sonar-scanner \
-                              -Dsonar.projectKey=user-handling-system-backend \
-                              -Dsonar.sources=backend \
-                              -Dsonar.javascript.lcov.reportPaths=backend/coverage/lcov.info
-                        '''
+                withSonarQubeEnv('MySonarQubeServer') {  // Now works after plugin
+                    dir('backend') {
+                        nodejs(nodeJSInstallationName: 'NodeJS-22') {
+                            sh '''
+                                sonar-scanner \
+                                  -Dsonar.projectKey=user-handling-system-backend \
+                                  -Dsonar.sources=. \
+                                  -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+                            '''
+                        }
                     }
                 }
             }
@@ -46,7 +48,7 @@ pipeline {
         stage('Quality Gate') {
             steps {
                 timeout(time: 3, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
+                    waitForQualityGate abortPipeline: true  // Now works after plugin
                 }
             }
         }
