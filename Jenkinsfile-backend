@@ -1,29 +1,25 @@
 // Jenkinsfile-backend 
 pipeline {
-    agent any
-
-    tools {
-        nodejs 'NodeJS-22'  // Now works after plugin + config
+    agent {
+        docker {
+            image 'node:22-alpine'
+            args '-u root'
+        }
     }
-
     environment {
         DOCKER_IMAGE = 'kartikmesh2406/user-handling-app'
     }
-
     stages {
         stage('Checkout') {
             steps {
                 checkout scm
             }
         }
-
         stage('Backend: Install & Test') {
             steps {
                 dir('backend') {
-                    nodejs(nodeJSInstallationName: 'NodeJS-22') {  // Wrap for auto PATH
-                        sh 'npm ci --legacy-peer-deps'
-                        sh 'npm test -- --coverage --coverageReporters=lcov || echo "No backend tests found"'
-                    }
+                    sh 'npm ci --legacy-peer-deps'
+                    sh 'npm test -- --coverage --coverageReporters=lcov || echo "No backend tests found"'
                 }
             }
         }
