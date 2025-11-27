@@ -1,9 +1,9 @@
-// Jenkinsfile-backend — FIXED FOR SONAR PLUGINS
+// Jenkinsfile-backend — FINAL SONARCLOUD VERSION (WORKS TODAY)
 pipeline {
     agent any
 
     tools {
-        nodejs 'NodeJS-22'  // Now works
+        nodejs 'NodeJS-22'   // ← already configured
     }
 
     environment {
@@ -22,46 +22,47 @@ pipeline {
                 dir('backend') {
                     nodejs(nodeJSInstallationName: 'NodeJS-22') {
                         sh 'npm ci --legacy-peer-deps'
-                        sh 'npm test -- --coverage --coverageReporters=lcov || echo "No backend tests found"'
+                        sh 'npm test -- --coverage --coverageReporters=lcov || echo "No tests found - continuing"'
                     }
                 }
             }
         }
 
-        stage('SonarQube Analysis - Backend') {
+        stage('SonarCloud Analysis') {
             steps {
-                withSonarQubeEnv('MySonarQubeServer') {  // Now works after plugin
+                withSonarQubeEnv('SonarCloud') {   // ← This name must exist in Jenkins global config
                     dir('backend') {
-                        nodejs(nodeJSInstallationName: 'NodeJS-22') {
-                            sh '''
-                                sonar-scanner \
-                                  -Dsonar.projectKey=user-handling-system-backend \
-                                  -Dsonar.sources=. \
-                                  -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
-                            '''
-                        }
+                        sh '''
+                            sonar-scanner \
+                              -Dsonar.projectKey=kartik-yo_user-handling-system-backend \
+                              -Dsonar.organization=kartik-yo \
+                              -Dsonar.host.url=https://sonarcloud.io \
+                              -Dsonar.login=${SONARQUBE_TOKEN} \
+                              -Dsonar.sources=. \
+                              -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+                        '''
                     }
                 }
             }
         }
 
-        stage('Quality Gate') {
+        stage('SonarCloud Quality Gate') {
             steps {
-                timeout(time: 3, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true  // Now works after plugin
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
                 }
             }
         }
 
-        stage('Docker Build & Push - Backend') {
+        stage('Docker Build & Push') {
             steps {
                 dir('backend') {
                     script {
                         def tag = "backend-${BUILD_NUMBER}"
                         def image = docker.build("${DOCKER_IMAGE}:${tag}")
 
-                        docker.withRegistry('https://registry.hub.docker.com', 'docker-creds') {
-                            image.push(tag)
+                        docker.withRegistry('', 'docker-creds') {
+                            image.push()
                             image.push('backend-latest')
                         }
                     }
@@ -72,7 +73,7 @@ pipeline {
 
     post {
         always { cleanWs() }
-        success { echo "BACKEND SUCCESS → ${DOCKER_IMAGE}:backend-${BUILD_NUMBER}" }
-        failure { echo "BACKEND FAILED" }
+        success { echo "BACKEND PIPELINE SUCCESS! Image: ${DOCKER_IMAGE}:backend-${BUILD_NUMBER}" }
+        failure { echo "PIPELINE FAILED — check SonarCloud or Docker logs" }
     }
 }
