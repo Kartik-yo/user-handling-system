@@ -1,15 +1,13 @@
-// Jenkinsfile (single file for both — or split into two)
+// Jenkinsfile-backend   ← ONLY FOR BACKEND
 pipeline {
     agent any
 
     tools {
-        nodejs 'NodeJS-22'    // name from Jenkins → Global Tool Configuration
+        nodejs 'NodeJS-22'   // ← Make sure NodeJS Plugin is installed and this name exists
     }
 
     environment {
         DOCKER_IMAGE = 'kartikmesh2406/user-handling-app'
-        DOCKER_CREDS = credentials('docker-creds')
-        SONAR_TOKEN  = credentials('sonarqube-token')
     }
 
     stages {
@@ -20,34 +18,22 @@ pipeline {
         }
 
         stage('Backend: Install & Test') {
-            when { changeset "backend/**" }
             steps {
                 dir('backend') {
                     sh 'npm ci --legacy-peer-deps'
-                    sh 'npm test -- --coverage --coverageReporters=lcov || echo "No tests"'
+                    sh 'npm test -- --coverage --coverageReporters=lcov || echo "No backend tests found"'
                 }
             }
         }
 
-        stage('Frontend: Install & Build & Test') {
-            when { changeset "frontend/**" }
+        stage('SonarQube Analysis - Backend') {
             steps {
-                dir('frontend') {
-                    sh 'npm ci --legacy-peer-deps'
-                    sh 'npm run build'
-                    sh 'npm run test:cov -- --coverage --coverageReporters=lcov'
-                }
-            }
-        }
-
-        stage('SonarQube Analysis') {
-            steps {
-                withSonarQubeEnv('MySonarQube') {   // configured in Jenkins Global Config
+                withSonarQubeEnv('MySonarQubeServer') {   // ← Configure this in Jenkins Global Config
                     sh '''
                         sonar-scanner \
-                          -Dsonar.projectKey=user-handling-system \
-                          -Dsonar.sources=. \
-                          -Dsonar.javascript.lcov.reportPaths=backend/coverage/lcov.info,frontend/coverage/lcov.info
+                          -Dsonar.projectKey=user-handling-system-backend \
+                          -Dsonar.sources=backend \
+                          -Dsonar.javascript.lcov.reportPaths=backend/coverage/lcov.info
                     '''
                 }
             }
@@ -55,43 +41,22 @@ pipeline {
 
         stage('Quality Gate') {
             steps {
-                timeout(time: 5, unit: 'MINUTES') {
+                timeout(time: 3, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
             }
         }
 
-        stage('Docker Build & Push') {
-            parallel {
-                stage('Backend Image') {
-                    when { changeset "backend/**" }
-                    steps {
-                        dir('backend') {
-                            script {
-                                def tag = "backend-${BUILD_NUMBER}"
-                                sh "docker build -t ${DOCKER_IMAGE}:${tag} ."
-                                docker.withRegistry('', 'docker-creds') {
-                                    sh "docker push ${DOCKER_IMAGE}:${tag}"
-                                    sh "docker tag ${DOCKER_IMAGE}:${tag} ${DOCKER_IMAGE}:backend-latest"
-                                    sh "docker push ${DOCKER_IMAGE}:backend-latest"
-                                }
-                            }
-                        }
-                    }
-                }
-                stage('Frontend Image') {
-                    when { changeset "frontend/**" }
-                    steps {
-                        dir('frontend') {
-                            script {
-                                def tag = "frontend-${BUILD_NUMBER}"
-                                sh "docker build -t ${DOCKER_IMAGE}:${tag} ."
-                                docker.withRegistry('', 'docker-creds') {
-                                    sh "docker push ${DOCKER_IMAGE}:${tag}"
-                                    sh "docker tag ${DOCKER_IMAGE}:${tag} ${DOCKER_IMAGE}:frontend-latest"
-                                    sh "docker push ${DOCKER_IMAGE}:frontend-latest"
-                                }
-                            }
+        stage('Docker Build & Push - Backend') {
+            steps {
+                dir('backend') {
+                    script {
+                        def tag = "backend-${BUILD_NUMBER}"
+                        def image = docker.build("${DOCKER_IMAGE}:${tag}")
+
+                        docker.withRegistry('https://registry.hub.docker.com', 'docker-creds') {
+                            image.push()
+                            image.push('backend-latest')
                         }
                     }
                 }
@@ -101,7 +66,7 @@ pipeline {
 
     post {
         always  { cleanWs() }
-        success { echo 'Pipeline succeeded — images pushed!' }
-        failure { echo 'Pipeline failed' }
+        success { echo "BACKEND PIPELINE SUCCESS → ${DOCKER_IMAGE}:backend-${BUILD_NUMBER}" }
+        failure { echo "BACKEND PIPELINE FAILED" }
     }
 }
