@@ -1,9 +1,9 @@
-// Jenkinsfile-backend   ← ONLY FOR BACKEND
+// Jenkinsfile-backend 
 pipeline {
     agent any
 
     tools {
-        NodeJS 'NodeJS-22'   // ← Make sure NodeJS Plugin is installed and this name exists
+        nodejs 'NodeJS-22'  // Now works after plugin + config
     }
 
     environment {
@@ -20,21 +20,25 @@ pipeline {
         stage('Backend: Install & Test') {
             steps {
                 dir('backend') {
-                    sh 'npm ci --legacy-peer-deps'
-                    sh 'npm test -- --coverage --coverageReporters=lcov || echo "No backend tests found"'
+                    nodejs(nodeJSInstallationName: 'NodeJS-22') {  // Wrap for auto PATH
+                        sh 'npm ci --legacy-peer-deps'
+                        sh 'npm test -- --coverage --coverageReporters=lcov || echo "No backend tests found"'
+                    }
                 }
             }
         }
 
         stage('SonarQube Analysis - Backend') {
             steps {
-                withSonarQubeEnv('MySonarQubeServer') {   // ← Configure this in Jenkins Global Config
-                    sh '''
-                        sonar-scanner \
-                          -Dsonar.projectKey=user-handling-system-backend \
-                          -Dsonar.sources=backend \
-                          -Dsonar.javascript.lcov.reportPaths=backend/coverage/lcov.info
-                    '''
+                withSonarQubeEnv('MySonarQubeServer') {  // Configure in Jenkins Global Config
+                    nodejs(nodeJSInstallationName: 'NodeJS-22') {
+                        sh '''
+                            sonar-scanner \
+                              -Dsonar.projectKey=user-handling-system-backend \
+                              -Dsonar.sources=backend \
+                              -Dsonar.javascript.lcov.reportPaths=backend/coverage/lcov.info
+                        '''
+                    }
                 }
             }
         }
@@ -55,7 +59,7 @@ pipeline {
                         def image = docker.build("${DOCKER_IMAGE}:${tag}")
 
                         docker.withRegistry('https://registry.hub.docker.com', 'docker-creds') {
-                            image.push()
+                            image.push(tag)
                             image.push('backend-latest')
                         }
                     }
@@ -65,8 +69,8 @@ pipeline {
     }
 
     post {
-        always  { cleanWs() }
-        success { echo "BACKEND PIPELINE SUCCESS → ${DOCKER_IMAGE}:backend-${BUILD_NUMBER}" }
-        failure { echo "BACKEND PIPELINE FAILED" }
+        always { cleanWs() }
+        success { echo "BACKEND SUCCESS → ${DOCKER_IMAGE}:backend-${BUILD_NUMBER}" }
+        failure { echo "BACKEND FAILED" }
     }
 }
