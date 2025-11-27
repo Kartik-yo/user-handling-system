@@ -4,55 +4,59 @@ pipeline {
 
     environment {
         DOCKER_CREDS = credentials('docker-creds')
-        SONAR_TOKEN  = credentials('sonarqube-token')
-        EC2_KEY      = credentials('ssh_user_and_key')
         GIT_CREDS    = credentials('github-cred')
+        SONAR_TOKEN  = credentials('sonarqube-token')   // secret text
     }
 
     stages {
-        stage('Backend: Test → SonarQube → Docker Build & Push') {
+        stage('Backend → Test → SonarQube → Docker Push') {
             steps {
-                sh '''
-                    ssh -o StrictHostKeyChecking=no -i $EC2_KEY_FILE ubuntu@3.236.244.98 << 'EOF'
-                    set -euo pipefail
+                withCredentials([
+                    usernamePassword(credentialsId: 'docker-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS'),
+                    usernamePassword(credentialsId: 'github-cred', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASS'),
+                    string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN'),
+                    sshUserPrivateKey(credentialsId: 'ssh_user_and_key', keyFileVariable: 'SSH_KEY_FILE', usernameVariable: 'SSH_USER')
+                ]) {
+                    sh '''
+                        set -euo pipefail
 
-                    cd ~
-                    rm -rf user-handling-system
-                    git clone https://${GIT_CREDS_USR}:${GIT_CREDS_PSW}@github.com/Kartik-yo/user-handling-system.git
-                    cd user-handling-system/backend
+                        # THIS IS THE ONLY CORRECT WAY
+                        ssh -o StrictHostKeyChecking=no -i "$SSH_KEY_FILE" ubuntu@3.236.244.98 << 'EOF'
+                        echo "Successfully connected to EC2"
 
-                    # Docker login
-                    echo "$DOCKER_CREDS_PSW" | docker login -u "$DOCKER_CREDS_USR" --password-stdin
+                        cd ~
+                        rm -rf user-handling-system
+                        git clone https://$GIT_USER:$GIT_PASS@github.com/Kartik-yo/user-handling-system.git
+                        cd user-handling-system/backend
 
-                    # Install + Test with coverage
-                    npm ci --legacy-peer-deps
-                    npm test -- --coverage --coverage --coverageReporters=lcov || echo "No tests – skipping coverage"
+                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
 
-                    # SonarQube scan
-                    sonar-scanner \\
-                      -Dsonar.projectKey=user-handling-system-backend \\
-                      -Dsonar.sources=. \\
-                      -Dsonar.host.url=http://3.236.244.98:9000 \\
-                      -Dsonar.login=$SONAR_TOKEN \\
-                      -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info \\
-                      -Dsonar.projectName="User Handling System – Backend"
+                        npm ci --legacy-peer-deps
+                        npm test -- --coverage --coverageReporters=lcov || echo "No tests found"
 
-                    # Build & push Docker image
-                    TAG="backend-${BUILD_NUMBER}"
-                    docker build -t kartikmesh2406/user-handling-app:${TAG} .
-                    docker push kartikmesh2406/user-handling-app:${TAG}
-                    docker tag kartikmesh2406/user-handling-app:${TAG} kartikmesh2406/user-handling-app:backend-latest
-                    docker push kartikmesh2406/user-handling-app:backend-latest
+                        sonar-scanner \
+                          -Dsonar.projectKey=user-handling-system-backend \
+                          -Dsonar.sources=. \
+                          -Dsonar.host.url=http://localhost:9000 \
+                          -Dsonar.login=$SONAR_TOKEN \
+                          -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
 
-                    echo "BACKEND PIPELINE COMPLETED SUCCESSFULLY"
-                    EOF
-                '''
+                        TAG=backend-${BUILD_NUMBER:-latest}
+                        docker build -t kartikmesh2406/user-handling-app:$TAG .
+                        docker push kartikmesh2406/user-handling-app:$TAG
+                        docker tag kartikmesh2406/user-handling-app:$TAG kartikmesh2406/user-handling-app:backend-latest
+                        docker push kartikmesh2406/user-handling-app:backend-latest
+
+                        echo "BACKEND SUCCESS"
+                        EOF
+                    '''
+                }
             }
         }
     }
 
     post {
-        success { echo 'Backend image pushed + SonarQube updated!' }
+        success { echo 'Backend pipeline succeeded!' }
         failure { echo 'Backend pipeline failed' }
     }
 }
