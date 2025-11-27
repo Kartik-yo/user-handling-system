@@ -3,9 +3,9 @@ pipeline {
     agent any
 
     environment {
+        // These are just for reference — we use withCredentials below
         DOCKER_CREDS = credentials('docker-creds')
         GIT_CREDS    = credentials('github-cred')
-        SONAR_TOKEN  = credentials('sonarqube-token')   // secret text
     }
 
     stages {
@@ -17,38 +17,51 @@ pipeline {
                     string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN'),
                     sshUserPrivateKey(credentialsId: 'ssh_user_and_key', keyFileVariable: 'SSH_KEY_FILE', usernameVariable: 'SSH_USER')
                 ]) {
-                    sh '''
+                    sh '''#!/bin/bash
                         set -euo pipefail
 
-                        # THIS IS THE ONLY CORRECT WAY
-                        ssh -o StrictHostKeyChecking=no -i "$SSH_KEY_FILE" ubuntu@3.236.244.98 << 'EOF'
-                        echo "Successfully connected to EC2"
+                        echo "Connecting to EC2 instance..."
+                        ssh -o StrictHostKeyChecking=no -i "$SSH_KEY_FILE" ${SSH_USER}@3.236.244.98 << 'EOF'
+                        set -euo pipefail
 
+                        echo "Connected to EC2: $(hostname)"
+
+                        # Clean and clone fresh code
                         cd ~
                         rm -rf user-handling-system
                         git clone https://$GIT_USER:$GIT_PASS@github.com/Kartik-yo/user-handling-system.git
                         cd user-handling-system/backend
 
+                        # Docker login
                         echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
 
+                        # Install deps + run tests with coverage
                         npm ci --legacy-peer-deps
-                        npm test -- --coverage --coverageReporters=lcov || echo "No tests found"
+                        npm test -- --coverage --coverageReporters=lcov || echo "No tests found - skipping coverage"
 
+                        # SonarQube analysis
                         sonar-scanner \
                           -Dsonar.projectKey=user-handling-system-backend \
-                          -Dsonar.sources=. \
+                          -Dsonar.organization=your-org-if-using-sonarcloud \
                           -Dsonar.host.url=http://localhost:9000 \
                           -Dsonar.login=$SONAR_TOKEN \
-                          -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+                          -Dsonar.sources=. \
+                          -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info \
+                          -Dsonar.sourceEncoding=UTF-8
 
-                        TAG=backend-${BUILD_NUMBER:-latest}
+                        # Build and push Docker image
+                        TAG="backend-${BUILD_NUMBER:-latest}"
+                        echo "Building and pushing: kartikmesh2406/user-handling-app:$TAG"
+
                         docker build -t kartikmesh2406/user-handling-app:$TAG .
                         docker push kartikmesh2406/user-handling-app:$TAG
                         docker tag kartikmesh2406/user-handling-app:$TAG kartikmesh2406/user-handling-app:backend-latest
                         docker push kartikmesh2406/user-handling-app:backend-latest
 
-                        echo "BACKEND SUCCESS"
+                        echo "BACKEND PIPELINE COMPLETED SUCCESSFULLY"
                         EOF
+
+                        echo "All operations completed on EC2"
                     '''
                 }
             }
@@ -56,7 +69,14 @@ pipeline {
     }
 
     post {
-        success { echo 'Backend pipeline succeeded!' }
-        failure { echo 'Backend pipeline failed' }
+        success {
+            echo "BACKEND PIPELINE SUCCESS - Image pushed: kartikmesh2406/user-handling-app:backend-${BUILD_NUMBER}"
+        }
+        failure {
+            echo "BACKEND PIPELINE FAILED - Check logs above"
+        }
+        always {
+            echo "Backend pipeline finished"
+        }
     }
 }
