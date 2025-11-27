@@ -13,7 +13,7 @@ pipeline {
         stage('Backend: Test → SonarQube → Docker Build & Push') {
             steps {
                 sh '''
-                    ssh -o StrictHostKeyChecking=no -i $EC2_KEY_FILE ubuntu@44.222.128.246 << 'EOF'
+                    ssh -o StrictHostKeyChecking=no -i $EC2_KEY_FILE ubuntu@3.236.244.98 << 'EOF'
                     set -euo pipefail
 
                     cd ~
