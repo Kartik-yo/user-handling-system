@@ -1,0 +1,58 @@
+// Jenkinsfile-frontend
+pipeline {
+    agent any
+
+    environment {
+        DOCKER_CREDS = credentials('docker-creds')
+        SONAR_TOKEN  = credentials('sonarqube-token')
+        EC2_KEY      = credentials('ssh_user_and_key')
+        GIT_CREDS    = credentials('github-cred')
+    }
+
+    stages {
+        stage('Frontend: Build → Test → SonarQube → Docker Build & Push') {
+            steps {
+                sh '''
+                    ssh -o StrictHostKeyChecking=no -i $EC2_KEY_FILE ubuntu@44.222.128.246 << 'EOF'
+                    set -euo pipefail
+
+                    cd ~
+                    rm -rf user-handling-system
+                    git clone https://${GIT_CREDS_USR}:${GIT_CREDS_PSW}@github.com/Kartik-yo/user-handling-system.git
+                    cd user-handling-system/frontend
+
+                    # Docker login
+                    echo "$DOCKER_CREDS_PSW" | docker login -u "$DOCKER_CREDS_USR" --password-stdin
+
+                    npm ci --legacy-peer-deps
+                    npm run build
+                    npm run test:cov -- --coverage --coverageReporters=lcov
+
+                    sonar-scanner \\
+                      -Dsonar.projectKey=user-handling-system-frontend \\
+                      -Dsonar.sources=src \\
+                      -Dsonar.host.url=http://3.236.244.98:9000 \\
+                      -Dsonar.login=$SONAR_TOKEN \\
+                      -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info \\
+                      -Dsonar.tests=tests \\
+                      -Dsonar.test.inclusions=**/*.test.js,**/*.spec.js \\
+                      -Dsonar.projectName="User Handling System – Frontend"
+
+                    TAG="frontend-${BUILD_NUMBER}"
+                    docker build -t kartikmesh2406/user-handling-app:${TAG} .
+                    docker push kartikmesh2406/user-handling-app:${TAG}
+                    docker tag kartikmesh2406/user-handling-app:${TAG} kartikmesh2406/user-handling-app:frontend-latest
+                    docker push kartikmesh2406/user-handling-app:frontend-latest
+
+                    echo "FRONTEND PIPELINE COMPLETED SUCCESSFULLY"
+                    EOF
+                '''
+            }
+        }
+    }
+
+    post {
+        success { echo 'Frontend image pushed + SonarQube updated!' }
+        failure { echo 'Frontend pipeline failed' }
+    }
+}
