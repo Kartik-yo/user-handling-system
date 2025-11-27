@@ -1,68 +1,107 @@
-// Jenkinsfile-backend
+// Jenkinsfile (single file for both — or split into two)
 pipeline {
     agent any
 
+    tools {
+        nodejs 'NodeJS-22'    // name from Jenkins → Global Tool Configuration
+    }
+
+    environment {
+        DOCKER_IMAGE = 'kartikmesh2406/user-handling-app'
+        DOCKER_CREDS = credentials('docker-creds')
+        SONAR_TOKEN  = credentials('sonarqube-token')
+    }
+
     stages {
-        stage('Backend → Test → SonarQube → Docker Push') {
+        stage('Checkout') {
             steps {
-                withCredentials([
-                    usernamePassword(credentialsId: 'docker-creds',   usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS'),
-                    usernamePassword(credentialsId: 'github-cred',   usernameVariable: 'GIT_USER',    passwordVariable: 'GIT_PASS'),
-                    string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN'),
-                    sshUserPrivateKey(credentialsId: 'ssh_user_and_key', keyFileVariable: 'SSH_KEY_FILE', usernameVariable: 'SSH_USER')
-                ]) {
-                    sh '''#!/bin/bash
-                        set -euo pipefail
+                checkout scm
+            }
+        }
 
-                        echo "Connecting to EC2..."
-                        ssh -o StrictHostKeyChecking=no -i "$SSH_KEY_FILE" ${SSH_USER}@3.236.244.98 << 'EOF'
-                        # ← Everything below runs on EC2 — variables are exported automatically by Jenkins
-                        set -euo pipefail
+        stage('Backend: Install & Test') {
+            when { changeset "backend/**" }
+            steps {
+                dir('backend') {
+                    sh 'npm ci --legacy-peer-deps'
+                    sh 'npm test -- --coverage --coverageReporters=lcov || echo "No tests"'
+                }
+            }
+        }
 
-                        echo "Connected to EC2: $(hostname)"
+        stage('Frontend: Install & Build & Test') {
+            when { changeset "frontend/**" }
+            steps {
+                dir('frontend') {
+                    sh 'npm ci --legacy-peer-deps'
+                    sh 'npm run build'
+                    sh 'npm run test:cov -- --coverage --coverageReporters=lcov'
+                }
+            }
+        }
 
-                        cd ~
-                        rm -rf user-handling-system
-                        git clone https://${GIT_USER}:${GIT_PASS}@github.com/Kartik-yo/user-handling-system.git
-                        cd user-handling-system/backend
-
-                        echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
-
-                        npm ci --legacy-peer-deps
-
-                        # Run tests with coverage (if any)
-                        if npm run | grep -q "test"; then
-                            npm test -- --coverage --coverageReporters=lcov || echo "Tests failed – continuing"
-                        else
-                            echo "No test script found"
-                        fi
-
-                        # SonarQube scan
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('MySonarQube') {   // configured in Jenkins Global Config
+                    sh '''
                         sonar-scanner \
-                          -Dsonar.projectKey=user-handling-system-backend \
+                          -Dsonar.projectKey=user-handling-system \
                           -Dsonar.sources=. \
-                          -Dsonar.host.url=http://localhost:9000 \
-                          -Dsonar.login="${SONAR_TOKEN}" \
-                          -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info || echo "Sonar scan failed – continuing"
-
-                        # Build & push Docker image
-                        TAG="backend-${BUILD_NUMBER:-latest}"
-                        docker build -t kartikmesh2406/user-handling-app:${TAG} .
-                        docker push kartikmesh2406/user-handling-app:${TAG}
-                        docker tag kartikmesh2406/user-handling-app:${TAG} kartikmesh2406/user-handling-app:backend-latest
-                        docker push kartikmesh2406/user-handling-app:backend-latest
-
-                        echo "BACKEND PIPELINE COMPLETED SUCCESSFULLY"
-                        EOF
+                          -Dsonar.javascript.lcov.reportPaths=backend/coverage/lcov.info,frontend/coverage/lcov.info
                     '''
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        stage('Docker Build & Push') {
+            parallel {
+                stage('Backend Image') {
+                    when { changeset "backend/**" }
+                    steps {
+                        dir('backend') {
+                            script {
+                                def tag = "backend-${BUILD_NUMBER}"
+                                sh "docker build -t ${DOCKER_IMAGE}:${tag} ."
+                                docker.withRegistry('', 'docker-creds') {
+                                    sh "docker push ${DOCKER_IMAGE}:${tag}"
+                                    sh "docker tag ${DOCKER_IMAGE}:${tag} ${DOCKER_IMAGE}:backend-latest"
+                                    sh "docker push ${DOCKER_IMAGE}:backend-latest"
+                                }
+                            }
+                        }
+                    }
+                }
+                stage('Frontend Image') {
+                    when { changeset "frontend/**" }
+                    steps {
+                        dir('frontend') {
+                            script {
+                                def tag = "frontend-${BUILD_NUMBER}"
+                                sh "docker build -t ${DOCKER_IMAGE}:${tag} ."
+                                docker.withRegistry('', 'docker-creds') {
+                                    sh "docker push ${DOCKER_IMAGE}:${tag}"
+                                    sh "docker tag ${DOCKER_IMAGE}:${tag} ${DOCKER_IMAGE}:frontend-latest"
+                                    sh "docker push ${DOCKER_IMAGE}:frontend-latest"
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 
     post {
-        success { echo "BACKEND SUCCESS → kartikmesh2406/user-handling-app:backend-${BUILD_NUMBER}" }
-        failure { echo "BACKEND FAILED — check logs above" }
-        always  { echo "Backend pipeline finished" }
+        always  { cleanWs() }
+        success { echo 'Pipeline succeeded — images pushed!' }
+        failure { echo 'Pipeline failed' }
     }
 }
