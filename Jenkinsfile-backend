@@ -97,25 +97,29 @@ pipeline {
             steps {
                 script {
                     def newTag = "backend-${BUILD_NUMBER}"
+                    def manifestFile = "Kubernetes/backend-deployment.yaml"   // ← Correct path!
 
-                    sh "sed -i 's|image: backend:.*|image: backend:${newTag}|' backend-deployment.yml"
-                    sh "cat backend-deployment.yml"  // Show updated file in logs
+                    // Update the image tag in the correct file
+                    sh "sed -i 's|image: backend:.*|image: backend:${newTag}|' ${manifestFile}"
+
+                    // Show the updated file in Jenkins logs
+                    sh "cat ${manifestFile}"
 
                     withCredentials([usernamePassword(
                         credentialsId: 'github-creds',
                         usernameVariable: 'GIT_USER',
                         passwordVariable: 'GIT_TOKEN'
                     )]) {
-                        sh '''
+                        sh """
                             git config user.name "Kartik-yo"
                             git config user.email "kartikmesh2406@gmail.com"
 
-                            git add backend-deployment.yml
+                            git add ${manifestFile}
                             git commit -m "chore(deploy): backend ${newTag} [skip ci]" || echo "No changes to commit"
 
-                            git remote set-url origin https://${GIT_TOKEN}@github.com/Kartik-yo/user-handling-system.git
+                            git remote set-url origin https://\${GIT_TOKEN}@github.com/Kartik-yo/user-handling-system.git
                             git push origin HEAD:main
-                        '''
+                        """
                     }
                 }
             }
