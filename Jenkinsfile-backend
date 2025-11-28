@@ -3,11 +3,7 @@ pipeline {
     agent any
     
     triggers {
-<<<<<<< HEAD
-        pollSCM('H/2 * * * *')  
-=======
         pollSCM('H/2 * * * *')   
->>>>>>> 8e63311 (fixes)
     }
 
     tools {
