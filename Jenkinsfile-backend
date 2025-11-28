@@ -3,7 +3,7 @@ pipeline {
     agent any
     
     triggers {
-        pollSCM('H/2 * * * *')   // delete this line after setting up GitHub webhook
+        pollSCM('H/2 * * * *')  
     }
 
     tools {
