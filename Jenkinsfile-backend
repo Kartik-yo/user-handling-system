@@ -1,9 +1,9 @@
 // Jenkinsfile-backend — FINAL, 100% WORKING (2025) — ubuntu user + sudo
 pipeline {
     agent any
-    
+
     triggers {
-        pollSCM('H/2 * * * *')   
+        pollSCM('H/2 * * * *')   // Check for changes every 2 minutes
     }
 
     tools {
@@ -11,7 +11,6 @@ pipeline {
     }
 
     environment {
-        // CORRECT USERNAME — this was the root of all evil
         DOCKER_IMAGE = 'kartikmesh2406/user-handling-app'
     }
 
@@ -31,45 +30,37 @@ pipeline {
             }
         }
 
-        stage('SonarCloud') {
+        stage('SonarCloud Analysis') {
             steps {
                 withSonarQubeEnv('SonarCloud') {
                     dir('backend') {
                         sh '''
                             sonar-scanner \
-                            -Dsonar.projectKey=kartik-yo_user-handling-system-backend \
-                            -Dsonar.organization=kartik-yo \
-                            -Dsonar.host.url=https://sonarcloud.io \
-                            -Dsonar.login=${SONAR_TOKEN} \
-                            -Dsonar.sources=. \
-                            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info \
-                            -Dsonar.sourceEncoding=UTF-8 \
-                            -Dsonar.exclusions=**node_modules/**,**dist/**,**coverage/**,**test/** \
-                            -Dsonar.scm.disabled=true \
-                            -Dsonar.analysis.mode=preview   # optional: faster, but no quality gate
+                              -Dsonar.projectKey=kartik-yo_user-handling-system-backend \
+                              -Dsonar.organization=kartik-yo \
+                              -Dsonar.host.url=https://sonarcloud.io \
+                              -Dsonar.login=${SONAR_TOKEN} \
+                              -Dsonar.sources=. \
+                              -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info \
+                              -Dsonar.sourceEncoding=UTF-8 \
+                              -Dsonar.exclusions=**node_modules/**,**dist/**,**coverage/**,**test/**,**tests/** \
+                              -Dsonar.scm.disabled=true
                         '''
                     }
                 }
             }
         }
 
-        // stage('SonarCloud Quality Gate') {
-        //     steps {
-        //         timeout(time: 5, unit: 'MINUTES') {
-        //             waitForQualityGate abortPipeline: true
-        //         }
-        //     }
-        // }
         stage('SonarCloud Quality Gate') {
             steps {
-                timeout(time: 15, unit: 'MINUTES') {   // 15 min = safe for any Node.js project
+                timeout(time: 15, unit: 'MINUTES') {
                     script {
                         def qg = waitForQualityGate abortPipeline: false
                         if (qg.status == 'OK') {
                             echo "Quality Gate PASSED"
                         } else {
-                            echo "Quality Gate ${qg.status} – continuing (Docker image already pushed)"
-                            currentBuild.result = 'UNSTABLE'
+                            echo "Quality Gate ${qg.status} – continuing anyway (image already pushed)"
+                            currentBuild.result = 'UNSTABLE'   // Yellow, not red
                         }
                     }
                 }
@@ -89,11 +80,9 @@ pipeline {
                             passwordVariable: 'P'
                         )]) {
                             sh """
-                                # Force fresh login as root (ubuntu user)
                                 sudo docker logout || true
                                 echo "\$P" | sudo docker login -u "\$U" --password-stdin
 
-                                # Build and push using sudo (works because ubuntu has docker access)
                                 sudo docker build -t ${img} -t ${lat} .
 
                                 sudo docker push ${img}
@@ -107,13 +96,18 @@ pipeline {
     }
 
     post {
-        always { cleanWs() }
+        always {
+            cleanWs(cleanWhenNotBuilt: false, deleteDirs: true, notFailBuild: true)
+        }
         success {
             echo "SUCCESS → Image pushed: ${DOCKER_IMAGE}:backend-${BUILD_NUMBER}"
             echo "Latest tag → ${DOCKER_IMAGE}:backend-latest"
         }
         failure {
-            echo "FAILED — Check: username, token scope, or sudo access"
+            echo "FAILED — Check logs: token, sudoers, or Docker daemon"
+        }
+        unstable {
+            echo "Build is UNSTABLE — Quality Gate did not pass, but image was pushed"
         }
     }
 }
