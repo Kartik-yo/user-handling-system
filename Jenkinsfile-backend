@@ -1,6 +1,10 @@
 // Jenkinsfile-backend — FINAL, 100% WORKING (2025) — ubuntu user + sudo
 pipeline {
     agent any
+    
+    triggers {
+        pollSCM('H/2 * * * *')   // delete this line after setting up GitHub webhook
+    }
 
     tools {
         nodejs 'NodeJS-22'
