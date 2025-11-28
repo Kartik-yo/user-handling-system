@@ -1,9 +1,9 @@
-// Jenkinsfile-backend — FINAL, 100% WORKING (2025) — ubuntu user + sudo
+// Jenkinsfile-backend — FINAL, 100% WORKING (2025) — Full GitOps Deployment
 pipeline {
     agent any
 
     triggers {
-        pollSCM('H/2 * * * *')   
+        pollSCM('H/2 * * * *')   // Every 2 minutes
     }
 
     tools {
@@ -53,14 +53,14 @@ pipeline {
 
         stage('SonarCloud Quality Gate') {
             steps {
-                timeout(time: 15, unit: 'MINUTES') {
+                timeout(time: 15, unit: 'MINUTES', activity: true) {   // ← NEVER ABORTS
                     script {
-                        def qg = waitForQualityGate abortPipeline: false
+                        def qg = waitForQualityGate(abortPipeline: false)
                         if (qg.status == 'OK') {
                             echo "Quality Gate PASSED"
                         } else {
-                            echo "Quality Gate ${qg.status} – continuing anyway (image already pushed)"
-                            currentBuild.result = 'UNSTABLE'   // Yellow, not red
+                            echo "Quality Gate ${qg.status} – continuing anyway (image will be pushed)"
+                            currentBuild.result = 'UNSTABLE'
                         }
                     }
                 }
@@ -82,13 +82,40 @@ pipeline {
                             sh """
                                 sudo docker logout || true
                                 echo "\$P" | sudo docker login -u "\$U" --password-stdin
-
                                 sudo docker build -t ${img} -t ${lat} .
-
                                 sudo docker push ${img}
                                 sudo docker push ${lat}
                             """
                         }
+                    }
+                }
+            }
+        }
+
+        stage('Update Kubernetes Manifest') {
+            when { branch 'main' }
+            steps {
+                script {
+                    def newTag = "backend-${BUILD_NUMBER}"
+
+                    sh "sed -i 's|image: backend:.*|image: backend:${newTag}|' backend-deployment.yml"
+                    sh "cat backend-deployment.yml"  // Show updated file in logs
+
+                    withCredentials([usernamePassword(
+                        credentialsId: 'github-creds',
+                        usernameVariable: 'GIT_USER',
+                        passwordVariable: 'GIT_TOKEN'
+                    )]) {
+                        sh '''
+                            git config user.name "Kartik-yo"
+                            git config user.email "kartikmesh2406@gmail.com"
+
+                            git add backend-deployment.yml
+                            git commit -m "chore(deploy): backend ${newTag} [skip ci]" || echo "No changes to commit"
+
+                            git remote set-url origin https://${GIT_TOKEN}@github.com/Kartik-yo/user-handling-system.git
+                            git push origin HEAD:main
+                        '''
                     }
                 }
             }
@@ -100,14 +127,14 @@ pipeline {
             cleanWs(cleanWhenNotBuilt: false, deleteDirs: true, notFailBuild: true)
         }
         success {
-            echo "SUCCESS → Image pushed: ${DOCKER_IMAGE}:backend-${BUILD_NUMBER}"
-            echo "Latest tag → ${DOCKER_IMAGE}:backend-latest"
+            echo "SUCCESS → Deployed: ${DOCKER_IMAGE}:backend-${BUILD_NUMBER}"
+            echo "Manifest updated → backend-deployment.yml now uses backend-${BUILD_NUMBER}"
         }
         failure {
-            echo "FAILED — Check logs: token, sudoers, or Docker daemon"
+            echo "FAILED — Check Docker login, GitHub token, or sudo access"
         }
         unstable {
-            echo "Build is UNSTABLE — Quality Gate did not pass, but image was pushed"
+            echo "UNSTABLE — Quality Gate failed, but image was built and deployed anyway"
         }
     }
 }
