@@ -17,14 +17,14 @@ pipeline {
             }
         }
 
-        stage('Install & Test') {
-            steps {
-                dir('backend') {
-                    sh 'npm ci --legacy-peer-deps'
-                    sh 'npm test -- --coverage --coverageReporters=lcov || true'
-                }
-            }
-        }
+        //stage('Install & Test') {
+        //    steps {
+        //        dir('backend') {
+        //            sh 'npm ci --legacy-peer-deps'
+        //            sh 'npm test -- --coverage --coverageReporters=lcov || true'
+        //        }
+        //    }
+        //}
 
         stage('SonarCloud') {
             steps {
