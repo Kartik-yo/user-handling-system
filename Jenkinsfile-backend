@@ -46,22 +46,17 @@ pipeline {
             steps {
                 dir('backend') {
                     script {
-                        def tag = "backend-${BUILD_NUMBER}"
-                        def image = "${DOCKER_IMAGE}:${tag}"
+                        def image = "kartikartikmesh2406/user-handling-app:backend-${BUILD_NUMBER}"
+                        def latest = "kartikartikmesh2406/user-handling-app:backend-latest"
 
-                        sh "docker build -t ${image} ."
-                        sh "docker tag ${image} ${DOCKER_IMAGE}:backend-latest"
+                        sh "docker build -t ${image} -t ${latest} ."
 
-                        // THIS IS THE ONLY LOGIN THAT WILL BE USED
-                        withCredentials([usernamePassword(
-                            credentialsId: 'docker-creds',
-                            usernameVariable: 'USER',
-                            passwordVariable: 'PASS')]) {
-
-                            sh 'echo "$PASS" | docker login -u "$USER" --password-stdin'
+                        // FORCE fresh login – nothing can override this
+                        withCredentials([usernamePassword(credentialsId: 'docker-creds', usernameVariable: 'U', passwordVariable: 'P')]) {
+                            sh 'docker logout || true'
+                            sh 'echo "$P" | docker login -u "$U" --password-stdin'
                             sh "docker push ${image}"
-                            sh "docker push ${DOCKER_IMAGE}:backend-latest"
-                            sh 'docker logout'
+                            sh "docker push ${latest}"
                         }
                     }
                 }
