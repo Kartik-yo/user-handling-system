@@ -46,8 +46,8 @@ pipeline {
             steps {
                 dir('backend') {
                     script {
-                        def image = "kartikartikmesh2406/user-handling-app:backend-${BUILD_NUMBER}"
-                        def latest = "kartikartikmesh2406/user-handling-app:backend-latest"
+                        def image = "kartikmesh2406/user-handling-app:backend-${BUILD_NUMBER}"
+                        def latest = "kartikmesh2406/user-handling-app:backend-latest"
 
                         sh "docker build -t ${image} -t ${latest} ."
 
