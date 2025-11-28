@@ -54,7 +54,7 @@ pipeline {
                         // FORCE fresh login – nothing can override this
                         withCredentials([usernamePassword(credentialsId: 'docker-creds', usernameVariable: 'U', passwordVariable: 'P')]) {
                             sh 'docker logout || true'
-                            sh 'echo "$P" | docker login -u "$U" --password-stdin'
+                            sh 'echo dckr_pat_VXId3V1vrd4EcYVxuLfG4WsOzLo | docker login -u kartikmesh2406 --password-stdin'
                             sh "docker push ${image}"
                             sh "docker push ${latest}"
                         }
