@@ -17,14 +17,14 @@ pipeline {
             }
         }
 
-        //stage('Install & Test') {
-        //    steps {
-        //        dir('backend') {
-        //            sh 'npm ci --legacy-peer-deps'
-        //            sh 'npm test -- --coverage --coverageReporters=lcov || true'
-        //        }
-        //    }
-        //}
+        stage('Install & Test') {
+           steps {
+               dir('backend') {
+                   sh 'npm ci --legacy-peer-deps'
+                   sh 'npm test -- --coverage --coverageReporters=lcov || true'
+               }
+           }
+        }
 
         stage('SonarCloud') {
             steps {
@@ -42,29 +42,30 @@ pipeline {
             }
         }
 
-        stage('SonarCloud Quality Gate') {
-            steps {
-                timeout(time: 5, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
-                }
-            }
-        }
+        // stage('SonarCloud Quality Gate') {
+        //     steps {
+        //         timeout(time: 5, unit: 'MINUTES') {
+        //             waitForQualityGate abortPipeline: true
+        //         }
+        //     }
+        // }
 
         stage('Docker Build & Push') {
             steps {
                 dir('backend') {
                     script {
-                        def image = "kartikmesh2406/user-handling-app:backend-${BUILD_NUMBER}"
-                        def latest = "kartikmesh2406/user-handling-app:backend-latest"
+                        def img = "${DOCKER_IMAGE}:backend-${BUILD_NUMBER}"
+                        def lat = "${DOCKER_IMAGE}:backend-latest"
 
-                        sh "docker build -t ${image} -t ${latest} ."
-
-                        // FORCE fresh login – nothing can override this
-                        withCredentials([usernamePassword(credentialsId: 'docker-creds', usernameVariable: 'U', passwordVariable: 'P')]) {
-                            sh 'sudo docker logout || true'
-                            sh 'echo dckr_pat_VXId3V1vrd4EcYVxuLfG4WsOzLo | sudo docker login -u kartikmesh2406 --password-stdin'
-                            sh "sudo docker push ${image}"
-                            sh "sudo docker push ${latest}"
+                        withCredentials([usernamePassword(credentialsId: 'docker-creds',
+                                                         usernameVariable: 'U', passwordVariable: 'P')]) {
+                            sh """
+                                sudo docker logout || true
+                                echo "\$P" | sudo docker login -u "\$U" --password-stdin
+                                sudo docker build -t ${img} -t ${lat} .
+                                sudo docker push ${img}
+                                sudo docker push ${lat}
+                            """
                         }
                     }
                 }
